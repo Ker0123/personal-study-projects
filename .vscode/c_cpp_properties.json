@@ -28,7 +28,23 @@
             "cStandard": "c17",
             "cppStandard": "gnu++14",
             "intelliSenseMode": "windows-gcc-x64",
-            "compilerPath": "C:/Program Files/MingW64/bin/gcc.exe"
+            "compilerPath": "C:/Program Files/MingW64/bin/g++.exe"
+        },
+        {
+            "name": "Linux cpp",
+            "includePath": [
+                "/usr/local/jpeg/include",
+                "/usr/local/jpeg/lib"
+            ],
+            "defines": [],
+            "cStandard": "c11",
+            "cppStandard": "gnu++11",
+            "intelliSenseMode": "linux-gcc-x64",
+            "compilerPath": "/usr/bin/g++",
+            "compilerArgs": [
+                "-I /usr/local/jpeg/include",
+                "-L /usr/local/jpeg/lib"
+            ]
         }
     ],
     "version": 4
