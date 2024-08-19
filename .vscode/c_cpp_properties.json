@@ -1,0 +1,35 @@
+{
+    "configurations": [
+        {
+            "name": "Windows cpp",
+            "includePath": [
+                "${default}"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "cStandard": "c17",
+            "cppStandard": "gnu++14",
+            "intelliSenseMode": "windows-gcc-x64",
+            "compilerPath": "C:/Program Files/MingW64/bin/g++.exe"
+        },
+        {
+            "name": "Windows c",
+            "includePath": [
+                "${default}"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "cStandard": "c17",
+            "cppStandard": "gnu++14",
+            "intelliSenseMode": "windows-gcc-x64",
+            "compilerPath": "C:/Program Files/MingW64/bin/gcc.exe"
+        }
+    ],
+    "version": 4
+}

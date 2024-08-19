@@ -1,0 +1,29 @@
+{
+    "tasks": [
+        {
+            "type": "cppbuild",
+            "label": "[Study] MingW64-g++ 生成活动文件",
+            "command": "C:/Program Files/MingW64/bin/g++.exe",
+            "args": [
+                "-fdiagnostics-color=always",
+                "-g",
+                "${workspaceFolder}/Study/src/*.cpp",
+                "-o",
+                "${workspaceFolder}/Study/build/study.exe",
+                "-lpthread"
+            ],
+            "options": {
+                "cwd": "C:/Program Files/MingW64/bin"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "detail": "[Study]项目专用的生成任务\n将/Study/src/内的所有.cpp文件编译为study.exe\n存放在/Study/build/"
+        }
+    ],
+    "version": "2.0.0"
+}
