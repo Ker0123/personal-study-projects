@@ -804,9 +804,9 @@ void FontTest()
         }
 
         lcd.clear_layer("画布");
-        lcd.Print_Text("画布", {10, 10}, "Can you hear me?", 1.0, color3);
-        lcd.Print_Text("画布", {10, 80}, "I'm trying to hear you.", 1.0, color1);
-        lcd.Print_Text("画布", {10, 160}, "Slince strikes like a hurricane.", scale, 0xff5b6ee1);
+        // lcd.Print_Text("画布", {10, 10}, "Can you hear me?", 1.0, color3);
+        // lcd.Print_Text("画布", {10, 80}, "I'm trying to hear you.", 1.0, color1);
+        // lcd.Print_Text("画布", {10, 160}, "Slince strikes like a hurricane.", scale, 0xff5b6ee1);
         lcd.draw_line(1, {start.x - 10, 240}, {start.x - 10, 450}, 5, 0xff309090);
         lcd.draw_line(1, {end.x + 20, 240}, {end.x + 20, 450}, 5, 0xff309090);
         lcd.Print_Text("画布", start, end, "I'm singing for you. You are screaming on me.\nIt's hard to see your tears, in the pouring rain.", 0.5, 0xff309090);
@@ -858,26 +858,8 @@ void txtReadTest()
     }
 }
 
-int main()
+void ebookTest()
 {
-    cout << "---------------------------------" << endl;
-    cout << "Version : " << "V0.4.1" << endl;
-    cout << "Last Complie Time : " << __TIME__ << " " << __DATE__ << endl;
-    cout << "Log:" << endl;
-    cout << "v0.1.2: 并发" << endl;
-    cout << "v0.1.3: 触摸输入信息监听、读取、存储" << endl;
-    cout << "v0.1.4: 画板功能初步" << endl;
-    cout << "v0.1.5: 画板功能完成" << endl;
-    cout << "v0.1.6: JPEG图片解码" << endl;
-    cout << "v0.1.7: 触控类实用接口实现" << endl;
-    cout << "v0.1.8: 优化后的画板" << endl;
-    cout << "v0.2.0: 滑动动作丰富的相册" << endl;
-    cout << "v0.2.1: 触控信息终端显示测试" << endl;
-    cout << "v0.3.0: 完成2048游戏(但是规则有点错误)" << endl;
-    cout << "v0.4.0: 加入文字显示功能" << endl;
-    cout << "v0.4.1: 基本完成文字功能, 并与lcd.h合并" << endl;
-    cout << "---------------------------------" << endl;
-
     string text = "堆栈异常常见于Linux系统中的应用程序运行过程中, 主要是由于栈溢出, 栈帧损坏, 函数调用错误等原因导致的. \n\
 要解决堆栈异常问题, 可以尝试以下步骤: \n\
 检查代码逻辑: 首先检查应用程序的代码逻辑,特别是涉及到栈操作的地方.确保函数调用,变量声明等操作正确无误.\n\
@@ -969,6 +951,42 @@ int main()
             old_text_pos_y = new_text_pos_y;
         }
     }
+}
+
+int main()
+{
+    cout << "---------------------------------" << endl;
+    cout << "Version : " << "V0.4.1" << endl;
+    cout << "Last Complie Time : " << __TIME__ << " " << __DATE__ << endl;
+    cout << "Log:" << endl;
+    cout << "v0.1.2: 并发" << endl;
+    cout << "v0.1.3: 触摸输入信息监听、读取、存储" << endl;
+    cout << "v0.1.4: 画板功能初步" << endl;
+    cout << "v0.1.5: 画板功能完成" << endl;
+    cout << "v0.1.6: JPEG图片解码" << endl;
+    cout << "v0.1.7: 触控类实用接口实现" << endl;
+    cout << "v0.1.8: 优化后的画板" << endl;
+    cout << "v0.2.0: 滑动动作丰富的相册" << endl;
+    cout << "v0.2.1: 触控信息终端显示测试" << endl;
+    cout << "v0.3.0: 完成2048游戏(但是规则有点错误)" << endl;
+    cout << "v0.4.0: 加入文字显示功能" << endl;
+    cout << "v0.4.1: 基本完成文字功能, 并与lcd.h合并" << endl;
+    cout << "---------------------------------" << endl;
+
+    LCD_Manager lcd;
+    lcd.font_inversion = true;
+    lcd.Load_FontImage("./res/font image/font image han.bmp", "./res/font image/font image han index.txt", {32, 250});
+    lcd.load_image("./res/head 800x480.bmp", "背景图片");
+    lcd.load_image("./res/WQ.bmp", "万青");
+    lcd.add_layer("背景");
+    lcd.add_layer("画布");
+    lcd.add_layer("UI");
+    lcd.draw_image("背景", {400, 240}, "背景图片", {0.5, 0.5});
+    lcd.draw_image("画布", {40, 40}, "万青", {0, 0});
+    lcd.Print_Text("UI", {400, 40}, "万能青年旅店", 1.0, 0xffd6be65, {-6, 0});
+    string text = "必须承认首张唱片是土法炼钢, 各种自学试验, 呼呼的吹风点火, 完全没有大跃进的豪爽速度, 反倒前后拖了快两年. 修改打磨, 福祸焉知. 硬伤是免不了的. ";
+    lcd.Print_Text("UI", {400, 140}, {750, 400}, text, 0.5, 0xffa0a0a0, {-2, +4});
+    lcd.update();
 
     return 0;
 }
