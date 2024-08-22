@@ -6,13 +6,14 @@
 #include <iomanip>
 #include <regex>
 #include <jpeglib.h>
+#include <cstring>
 
 using namespace std;
 
 // vector<Image> images;       // 加载图片的容器
 // vector<Layer> layers;       // 图层的容器
 // pixel per_frame[800 * 480]; // 预备帧
-// pixel *mmap_ptr;            // 内存映射指针
+// pixel *mmap_ptr;            // 内存映射指针8
 
 // LCD_Manager();  // 初始化：建立内存映射，加载图片
 // ~LCD_Manager(); // 析构：释放内存映射
@@ -30,18 +31,19 @@ using namespace std;
 LCD_Manager::LCD_Manager()
 {
     cout << "LCD_Manager::LCD_Manager() is called" << endl;
-    char LCD_file_path[] = "/dev/fb0";
-    int FD = open(LCD_file_path, O_RDWR);
-    if (FD == -1)
+    const char *LCD_file_path = "/dev/fb0";
+    lcd_fd = open(LCD_file_path, O_RDWR);
+    if (lcd_fd == -1)
     {
-        cout << "Error: cannot open " << LCD_file_path << endl;
-        exit(1);
+        cerr << "Error: cannot open " << LCD_file_path << endl;
+        exit(EXIT_FAILURE);
     }
-    mmap_ptr = (pixel *)mmap(0, 800 * 480 * sizeof(pixel), PROT_READ | PROT_WRITE, MAP_SHARED, FD, 0);
+    mmap_ptr = static_cast<pixel *>(mmap(nullptr, 800 * 480 * sizeof(pixel), PROT_READ | PROT_WRITE, MAP_SHARED, lcd_fd, 0));
     if (mmap_ptr == MAP_FAILED)
     {
-        cout << "Error: cannot mmap " << LCD_file_path << endl;
-        exit(1);
+        cerr << "Error: cannot mmap " << LCD_file_path << endl;
+        close(lcd_fd);
+        exit(EXIT_FAILURE);
     }
     font_inversion = false;
 }
@@ -51,50 +53,48 @@ LCD_Manager::~LCD_Manager()
 {
     cout << "LCD_Manager::~LCD_Manager() is called" << endl;
     munmap(mmap_ptr, 800 * 480 * sizeof(pixel));
+    close(lcd_fd);
+}
+
+int LCD_Manager::get_layer_index(const string &name) const
+{
+    auto it = layer_map.find(name);
+    if (it != layer_map.end())
+        return it->second;
+    throw invalid_argument("Layer not found: " + name);
+}
+
+int LCD_Manager::get_image_index(const string &name) const
+{
+    auto it = image_map.find(name);
+    if (it != image_map.end())
+        return it->second;
+    throw invalid_argument("Image not found: " + name);
 }
 
 void LCD_Manager::load_image_bmp(const char *Path, string name)
 {
-    // cout << "LCD_Manager::load_image(" << Path << ", " << name << ") is called" << endl;
     // 打开文件
     int FD = open(Path, O_RDONLY);
     if (FD == -1)
     {
-        cout << "Error: cannot open " << Path << endl;
-        exit(1);
+        cerr << "Error: cannot open " << Path << endl;
+        return;
     }
 
     // 读取文件头信息
     char FileType[2]{'\0'};
-    int FileSize;
-    int PixelDataOffset;
-    int HeaderSize;
-    int ImageWidth;
-    int ImageHeight;
-    int Planes = 0;
-    int BitsPerPixel = 0;
-    int Compression;
-    int ImageSize;
-    int XpixelsPerMeter;
-    int YpixelsPerMeter;
-    int TotalColors;
-    int ImportantColors;
+    int FileSize, PixelDataOffset, ImageWidth, ImageHeight, BitsPerPixel = 0;
     read(FD, &FileType, 2);
     read(FD, &FileSize, 4);
     lseek(FD, 10, SEEK_SET);
     read(FD, &PixelDataOffset, 4);
-    read(FD, &HeaderSize, 4);
+    lseek(FD, 18, SEEK_SET); // 跳过不必要的头信息
     read(FD, &ImageWidth, 4);
     read(FD, &ImageHeight, 4);
-    read(FD, &Planes, 2);
+    lseek(FD, 28, SEEK_SET); // 跳过不必要的头信息
     read(FD, &BitsPerPixel, 2);
-    read(FD, &Compression, 4);
-    read(FD, &ImageSize, 4);
-    read(FD, &XpixelsPerMeter, 4);
-    read(FD, &YpixelsPerMeter, 4);
-    read(FD, &TotalColors, 4);
-    read(FD, &ImportantColors, 4);
-    cout << "Reading image data ..." << endl;
+    cout << "\nReading image data ..." << endl;
     cout << "Path: " << Path << endl;
     cout << "File size: " << FileSize << endl;
     cout << "Image width: " << ImageWidth << endl;
@@ -113,8 +113,7 @@ void LCD_Manager::load_image_bmp(const char *Path, string name)
             read(FD, &color, 3);
             color |= 0xff000000;
             pixel_data[ImageWidth * (ImageHeight - 1 - (i / ImageWidth)) + i % ImageWidth] = color;
-            // 应对比特填充(一行像素对应的字节数不是4的整数倍时，文件中会补齐。读取下一行时，需要跳过补齐的字节)
-            int bitFill = 4 - (i * 3 + 3) % 4;
+            int bitFill = 4 - (i * 3 + 3) % 4; // 优化比特填充计算
             read(FD, nullptr, bitFill);
         }
         break;
@@ -130,19 +129,21 @@ void LCD_Manager::load_image_bmp(const char *Path, string name)
         }
         break;
     default:
-        cout << "Error: unsupported bits per pixel: " << BitsPerPixel << endl;
-        exit(1);
-        break;
+        cerr << "Error: unsupported bits per pixel: " << BitsPerPixel << endl;
+        close(FD);
+        delete[] pixel_data;
+        return;
     }
 
     // 保存图片信息
     Image image(name, ImageWidth, ImageHeight, pixel_data);
     images.push_back(image);
-    cout << "Done.\n"
-         << endl;
 
     // 建立索引
-    image_map.insert(map<string, int>::value_type(name, images.size() - 1));
+    image_map[name] = images.size() - 1;
+
+    cout << "Reading image data done.\n"
+         << endl;
 
     // 关闭文件
     close(FD);
@@ -153,24 +154,37 @@ void LCD_Manager::load_image_jpg(const char *Path, string name)
     FILE *fp = fopen(Path, "rb");
     if (!fp)
     {
-        cout << "Error: cannot open " << Path << endl;
-        exit(1);
+        cerr << "Error: cannot open " << Path << endl;
+        return;
     }
-    cout << "\nReading jpg image data ..." << endl;
+
+    cout << "\nOpen and reading jpg image info ..." << endl;
+
     jpeg_decompress_struct cinfo;
     jpeg_error_mgr jerr;
     cinfo.err = jpeg_std_error(&jerr);
     jpeg_create_decompress(&cinfo);
     jpeg_stdio_src(&cinfo, fp);
-    jpeg_read_header(&cinfo, TRUE);
-    jpeg_start_decompress(&cinfo);
+
+    if (jpeg_read_header(&cinfo, TRUE) != JPEG_HEADER_OK)
+    {
+        cerr << "Error: invalid JPEG file: " << Path << endl;
+        jpeg_destroy_decompress(&cinfo);
+        fclose(fp);
+        return;
+    }
+
     printJPEGDecompressStructMembers(cinfo);
+    jpeg_start_decompress(&cinfo);
+
     int ImageWidth = cinfo.output_width;
     int ImageHeight = cinfo.output_height;
     int row_stride = ImageWidth * cinfo.output_components;
     JSAMPARRAY buffer = (*cinfo.mem->alloc_sarray)((j_common_ptr)&cinfo, JPOOL_IMAGE, row_stride, 1);
     pixel *pixel_data = new pixel[ImageWidth * ImageHeight];
+
     cout << "Start reading data ..." << endl;
+
     while (cinfo.output_scanline < cinfo.output_height)
     {
         jpeg_read_scanlines(&cinfo, buffer, 1);
@@ -182,18 +196,14 @@ void LCD_Manager::load_image_jpg(const char *Path, string name)
     Image image(name, ImageWidth, ImageHeight, pixel_data);
     images.push_back(image);
 
-    image_map.insert(map<string, int>::value_type(name, images.size() - 1));
+    image_map[name] = images.size() - 1;
 
     jpeg_finish_decompress(&cinfo);
     jpeg_destroy_decompress(&cinfo);
     fclose(fp);
-    cout << "Done.\n"
+    cout << "reading data done.\n"
          << endl;
     return;
-}
-
-void LCD_Manager::load_image_png(const char *Path, string name)
-{
 }
 
 void LCD_Manager::printJPEGDecompressStructMembers(const jpeg_decompress_struct &cinfo)
@@ -221,36 +231,24 @@ void LCD_Manager::printJPEGDecompressStructMembers(const jpeg_decompress_struct 
     cout << "是否启用两遍量化 : " << cinfo.enable_2pass_quant << endl;
 }
 
-bool LCD_Manager::is_in_range(int x, int y)
+bool LCD_Manager::is_in_range(int x, int y) const
 {
-    if (x >= 0 && x < 800 && y >= 0 && y < 480)
-    {
-        return true;
-    }
-    return false;
+    return x >= 0 && x < 800 && y >= 0 && y < 480;
 }
 
-bool LCD_Manager::is_in_range(Vector2 pos)
+bool LCD_Manager::is_in_range(Vector2 pos) const
 {
-    if (pos.x >= 0 && pos.x < 800 && pos.y >= 0 && pos.y < 480)
-    {
-        return true;
-    }
-    return false;
+    return pos.x >= 0 && pos.x < 800 && pos.y >= 0 && pos.y < 480;
 }
 
-bool LCD_Manager::is_han(wchar_t c)
+bool LCD_Manager::is_han(wchar_t c) const
 {
-    if (0xE00000 <= c && c <= 0xEFFFFF)
-    {
-        return true;
-    }
-    return false;
+    return 0xE00000 <= c && c <= 0xEFFFFF;
 }
 
-int LCD_Manager::get_utf8_len_from_first_byte(unsigned char first_byte)
+int LCD_Manager::get_utf8_len_from_first_byte(unsigned char first_byte) const
 {
-    if (0x00 <= first_byte && first_byte <= 0x7F) // 1byte编码形式
+    if (first_byte <= 0x7F) // 1byte编码形式
     {
         return 1;
     }
@@ -268,10 +266,9 @@ int LCD_Manager::get_utf8_len_from_first_byte(unsigned char first_byte)
     }
     else
     {
-        return 0;
+        printf("Invalid UTF-8 first byte: %02X\n", first_byte);
+        throw invalid_argument("Invalid UTF-8 first byte");
     }
-
-    return -1;
 }
 
 void LCD_Manager::Load_FontImage(const char *path_to_font_image)
@@ -279,43 +276,24 @@ void LCD_Manager::Load_FontImage(const char *path_to_font_image)
     int FD = open(path_to_font_image, O_RDONLY);
     if (FD == -1)
     {
-        cout << "Error: cannot open " << path_to_font_image << endl;
-        exit(1);
+        cerr << "Error: cannot open " << path_to_font_image << endl;
+        return;
     }
 
     // 读取文件头信息
     char FileType[2]{'\0'};
-    int FileSize;
-    int PixelDataOffset;
-    int HeaderSize;
-    int ImageWidth;
-    int ImageHeight;
-    int Planes = 0;
-    int BitsPerPixel = 0;
-    int Compression;
-    int ImageSize;
-    int XpixelsPerMeter;
-    int YpixelsPerMeter;
-    int TotalColors;
-    int ImportantColors;
+    int FileSize, PixelDataOffset, ImageWidth, ImageHeight, BitsPerPixel = 0;
     read(FD, &FileType, 2);
     read(FD, &FileSize, 4);
     lseek(FD, 10, SEEK_SET);
     read(FD, &PixelDataOffset, 4);
-    read(FD, &HeaderSize, 4);
+    lseek(FD, 18, SEEK_SET); // 跳过不必要的头信息
     read(FD, &ImageWidth, 4);
     read(FD, &ImageHeight, 4);
-    read(FD, &Planes, 2);
+    lseek(FD, 28, SEEK_SET); // 跳过不必要的头信息
     read(FD, &BitsPerPixel, 2);
-    read(FD, &Compression, 4);
-    read(FD, &ImageSize, 4);
-    read(FD, &XpixelsPerMeter, 4);
-    read(FD, &YpixelsPerMeter, 4);
-    read(FD, &TotalColors, 4);
-    read(FD, &ImportantColors, 4);
     cout << "\nReading font image data ..." << endl;
     cout << "Path: " << path_to_font_image << endl;
-    cout << "File type: " << FileType[0] << FileType[1] << endl;
     cout << "File size: " << FileSize << endl;
     cout << "Image width: " << ImageWidth << endl;
     cout << "Image height: " << ImageHeight << endl;
@@ -351,36 +329,13 @@ void LCD_Manager::Load_FontImage(const char *path_to_font_image)
     {
         for (int c = 0; c < 16; c++)
         {
-            // cout << ch << " -> " << (Vector2){c * font.word_size.x, l * font.word_size.y} << endl;
             font_map[ch++] = {c * font.word_size.x, l * font.word_size.y};
         }
     }
-    cout << "Done.\n"
+    cout << "Reading font image data done.\n"
          << endl;
 
     return;
-    // 根据索引表，尝试在终端打印
-    for (char c = ' '; c < 'z'; c++)
-    {
-        Vector2 pos = font_map[c];
-        cout << "Printing " << c << "..." << pos << endl;
-        for (int l = 0; l < font.word_size.y; l++)
-        {
-            for (int c = 0; c < font.word_size.x; c++)
-            {
-                if (font.data[(pos.y + l) * font.image_size.x + pos.x + c])
-                {
-                    cout << "# ";
-                }
-                else
-                {
-                    cout << "_ ";
-                }
-            }
-            cout << endl;
-        }
-        usleep(600000);
-    }
 }
 
 void LCD_Manager::Load_FontImage(const char *font_image, const char *font_index_text, Vector2 cut)
@@ -391,32 +346,40 @@ void LCD_Manager::Load_FontImage(const char *font_image, const char *font_index_
         cout << "Error: cannot open " << font_image << endl;
         exit(1);
     }
-    // 读取必要的bmp文件信息
-    int PixelDataOffset;
-    int ImageWidth;
-    int ImageHeight;
+
+    // 读取文件头信息
+    char FileType[2]{'\0'};
+    int FileSize, PixelDataOffset, ImageWidth, ImageHeight, BitsPerPixel = 0;
+    read(image_fd, &FileType, 2);
+    read(image_fd, &FileSize, 4);
     lseek(image_fd, 10, SEEK_SET);
     read(image_fd, &PixelDataOffset, 4);
-    lseek(image_fd, 18, SEEK_SET);
+    lseek(image_fd, 18, SEEK_SET); // 跳过不必要的头信息
     read(image_fd, &ImageWidth, 4);
     read(image_fd, &ImageHeight, 4);
-    lseek(image_fd, PixelDataOffset, SEEK_SET);
+    lseek(image_fd, 28, SEEK_SET); // 跳过不必要的头信息
+    read(image_fd, &BitsPerPixel, 2);
+    cout << "\nReading font image data ..." << endl;
+    cout << "Path: " << font_image << endl;
+    cout << "File size: " << FileSize << endl;
+    cout << "Image width: " << ImageWidth << endl;
+    cout << "Image height: " << ImageHeight << endl;
+    cout << "Bits per pixel: " << BitsPerPixel << endl;
 
-    // 读取bmp文件数据，按方便的方式存到font.data中
+    // 处理图片像素数据，写到font.data中
     int word_size_x = ImageWidth / cut.x;
     int word_size_y = ImageHeight / cut.y;
     font.image_size = {ImageWidth, ImageHeight};
     font.word_size = {word_size_x, word_size_y};
     font.data = new pixel[font.image_size.x * font.image_size.y];
-    cout << "\nReading font image data ..." << endl;
-    cout << "Image width: " << ImageWidth << endl;
-    cout << "Image height: " << ImageHeight << endl;
     cout << "Word size: " << word_size_x << "x" << word_size_y << endl;
+
+    lseek(image_fd, PixelDataOffset, SEEK_SET);
     pixel bit_32;
     pixel bit_32_reverse;
-    for (int l = font.image_size.y - 1; l >= 0; l--)
+    for (int l = ImageHeight - 1; l >= 0; l--)
     {
-        for (int c = 0; c < font.image_size.x; c += 32)
+        for (int c = 0; c < ImageWidth; c += 32)
         {
             read(image_fd, &bit_32, 4);
             bit_32_reverse = ((bit_32 & 0x000000FF) << 24) | ((bit_32 & 0x0000FF00) << 8) | ((bit_32 & 0x00FF0000) >> 8) | ((bit_32 & 0xFF000000) >> 24);
@@ -427,9 +390,19 @@ void LCD_Manager::Load_FontImage(const char *font_image, const char *font_index_
         }
     }
 
+    cout << "Reading font image data done." << endl;
+    close(image_fd);
+
     // 建立索引表
     cout << "Building font index table..." << endl;
-    int index_fd = open("./res/font image/font image han index.txt", O_RDONLY);
+    int index_fd = open(font_index_text, O_RDONLY);
+    if (index_fd == -1)
+    {
+        cerr << "Error: cannot open " << font_index_text << endl;
+        delete[] font.data;
+        return;
+    }
+
     int img_pos_x = 0;
     int img_pos_y = 0;
     wchar_t wch = '\0';
@@ -449,9 +422,6 @@ void LCD_Manager::Load_FontImage(const char *font_image, const char *font_index_
 
         // 联系起来
         font_map[wch] = {img_pos_x, img_pos_y};
-        // printf("Conecting %x to (%d,%d)\n", wch, img_pos_x, img_pos_y);
-
-        // 图片上虚拟指针右移一图片宽度，可能换行。
         img_pos_x = is_han(wch) ? img_pos_x + 2 * word_size_x : img_pos_x + word_size_x;
         if (img_pos_x >= font.image_size.x)
         {
@@ -461,96 +431,119 @@ void LCD_Manager::Load_FontImage(const char *font_image, const char *font_index_
     }
     cout << "Done.\n"
          << endl;
+    close(index_fd);
 
     return;
 }
 
 void LCD_Manager::load_image(const char *Path, string name)
 {
-    if (regex_match(Path, regex(".*\\.bmp")))
+    string pathStr(Path);
+    if (pathStr.size() >= 4 && pathStr.substr(pathStr.size() - 4) == ".bmp")
     {
         load_image_bmp(Path, name);
-        return;
     }
-    if (regex_match(Path, regex(".*\\.(jpg|jpeg)")))
+    else if (pathStr.size() >= 4 && (pathStr.substr(pathStr.size() - 4) == ".jpg" || pathStr.substr(pathStr.size() - 5) == ".jpeg"))
     {
         load_image_jpg(Path, name);
-        return;
     }
-    cout << "Error: unsupported image format: " << Path << endl;
-    exit(1);
+    else
+    {
+        throw invalid_argument("Error: unsupported image format: " + pathStr);
+    }
 }
 
-void LCD_Manager::add_layer(string name)
+void LCD_Manager::add_layer(const string &name)
 {
-    // cout << "LCD_Manager::add_layer(" << name << ") is called" << endl;
-    Layer layer(name, true);
+    // 检查图层名称是否已存在
+    if (layer_map.find(name) != layer_map.end())
+    {
+        throw invalid_argument("Layer with name '" + name + "' already exists.");
+    }
+
+    Layer layer(name);
     layers.push_back(layer);
-    layer_map.insert(map<string, int>::value_type(name, layers.size() - 1));
+    layer_map[name] = layers.size() - 1;
+    return;
 }
 
 void LCD_Manager::remove_layer(int index)
 {
-    // cout << "LCD_Manager::remove_layer(" << index << ") is called" << endl;
+    if (index < 0 || index >= layers.size())
+    {
+        throw out_of_range("Layer index out of range");
+    }
     layers.erase(layers.begin() + index);
 }
 
-void LCD_Manager::remove_layer(string name)
+void LCD_Manager::remove_layer(const string &name)
 {
-    layers.erase(layers.begin() + layer_map[name]);
+    auto it = layer_map.find(name);
+    if (it != layer_map.end())
+    {
+        layers.erase(layers.begin() + it->second);
+        layer_map.erase(it); // 同时从layer_map中移除该图层的记录
+    }
+    else
+    {
+        throw invalid_argument("Layer with name '" + name + "' does not exist.");
+    }
 }
 
 void LCD_Manager::clear_layer(int index)
 {
-    // cout << "LCD_Manager::clear_layer(" << index << ") is called" << endl;
-    Layer &layer = layers[index];
-    for (int i = 0; i < 800 * 480; i++)
+    if (index < 0 || index >= layers.size())
     {
-        layer.pixels[i] = 0x00000000;
+        throw out_of_range("Layer index out of range");
     }
+    Layer &layer = layers[index];
+    memset(layer.pixels, 0, 800 * 480 * sizeof(pixel));
 }
 
-void LCD_Manager::clear_layer(string name)
+void LCD_Manager::clear_layer(const string &name)
 {
-    // cout << "LCD_Manager::clear_layer(" << index << ") is called" << endl;
-    Layer &layer = layers[layer_map[name]];
-    for (int i = 0; i < 800 * 480; i++)
+    auto it = layer_map.find(name);
+    if (it == layer_map.end())
     {
-        layer.pixels[i] = 0x00000000;
+        throw invalid_argument("Layer with name '" + name + "' does not exist.");
     }
+    Layer &layer = layers[it->second];
+    memset(layer.pixels, 0, 800 * 480 * sizeof(pixel));
 }
 
 void LCD_Manager::show_layer(int index)
 {
-    // cout << "LCD_Manager::show_layer(" << index << ") is called" << endl;
+    if (index < 0 || index >= layers.size())
+    {
+        throw out_of_range("Layer index out of range");
+    }
     layers[index].visible = true;
 }
 
 void LCD_Manager::hide_layer(int index)
 {
-    // cout << "LCD_Manager::hide_layer(" << index << ") is called" << endl;
+    if (index < 0 || index >= layers.size())
+    {
+        throw out_of_range("Layer index out of range");
+    }
     layers[index].visible = false;
 }
 
 void LCD_Manager::Print_Char(int layer_index, Vector2 scr_pos, wchar_t c, float scale, pixel color)
 {
+    if (layer_index < 0 || layer_index >= layers.size())
+    {
+        throw out_of_range("Layer index out of range");
+    }
     Layer &layer = layers[layer_index];
 
     // 找到字库中对应的字体，找不到就用错误字符代替(~的后一个)
-    Vector2 img_pos;
-    if (font_map.find(c) == font_map.end())
-    {
-        img_pos = font_map['~' + 1];
-    }
-    else
-    {
-        img_pos = font_map[c];
-    }
+    auto it = font_map.find(c);
+    Vector2 img_pos = (it == font_map.end()) ? font_map['~' + 1] : it->second;
 
     // 缩放
     int font_width = font.word_size.x * (is_han(c) ? 2 : 1);
     int font_height = font.word_size.y;
-
 
     if (abs(scale - 1.0) < 0.001) // 不缩放
     {
@@ -558,19 +551,14 @@ void LCD_Manager::Print_Char(int layer_index, Vector2 scr_pos, wchar_t c, float 
         {
             for (int c = 0; c < font_width; c++)
             {
-                if(!is_in_range(scr_pos + Vector2{c, l}))
+                if (!is_in_range(scr_pos + Vector2{c, l}))
                 {
                     continue;
                 }
-                if (font_inversion && !font.data[(img_pos.y + l) * font.image_size.x + (img_pos.x + c)])
+                int index = (img_pos.y + l) * font.image_size.x + (img_pos.x + c);
+                if (font_inversion != font.data[index]) // 反相+无色/不反相+有色 -> 显示
                 {
                     layer.pixels[(scr_pos.y + l) * 800 + scr_pos.x + c] = color;
-                    continue;
-                }
-                if(!font_inversion &&  font.data[(img_pos.y + l) * font.image_size.x + (img_pos.x + c)])
-                {
-                    layer.pixels[(scr_pos.y + l) * 800 + scr_pos.x + c] = color;
-                    continue;
                 }
             }
         }
@@ -584,20 +572,15 @@ void LCD_Manager::Print_Char(int layer_index, Vector2 scr_pos, wchar_t c, float 
     {
         for (int c = 0; c < scr_size_new.x; c++)
         {
-            Vector2 fit_to_img = {img_pos.x + int(c * 1.0 / scale), img_pos.y + int(l * 1.0 / scale)};
-            if(!is_in_range(scr_pos + Vector2{c, l}))
+            fit_to_img = {img_pos.x + int(c * 1.0 / scale), img_pos.y + int(l * 1.0 / scale)};
+            if (!is_in_range(scr_pos + Vector2{c, l}))
             {
                 continue;
             }
-            if(font_inversion && !font.data[fit_to_img.y * font.image_size.x + fit_to_img.x])
+            int index = fit_to_img.y * font.image_size.x + fit_to_img.x;
+            if (font_inversion != font.data[index])
             {
                 layer.pixels[(scr_pos.y + l) * 800 + scr_pos.x + c] = color;
-                continue;
-            }
-            if(!font_inversion &&  font.data[fit_to_img.y * font.image_size.x + fit_to_img.x])
-            {
-                layer.pixels[(scr_pos.y + l) * 800 + scr_pos.x + c] = color;
-                continue;
             }
         }
     }
@@ -605,25 +588,31 @@ void LCD_Manager::Print_Char(int layer_index, Vector2 scr_pos, wchar_t c, float 
 
 void LCD_Manager::Print_Text(int layer_index, Vector2 start_pos, string text, float scale, pixel color, Vector2 LC_adjust)
 {
+    if (layer_index < 0 || layer_index >= layers.size())
+    {
+        throw out_of_range("Layer index out of range");
+    }
+
     Vector2 word_size = {int(font.word_size.x * scale + LC_adjust.x), int(font.word_size.y * scale + LC_adjust.y)}; // 计算缩放后的字体大小，用以移动打印位置
     Vector2 write_pos = start_pos;
-    char ch;
-    wchar_t wch;
+    int text_length = text.length();
 
     // 遍历整个字符串
-    for (int i = 0; i < text.length(); i++)
+    for (int i = 0; i < text_length;)
     {
-        ch = text[i];
+        unsigned char ch = text[i];
+        wchar_t wch = 0;
+        int utf8_len = get_utf8_len_from_first_byte(ch);
 
         // 根据字符byte长度，额外读取字符组成宽字符wchar_t
         wch = ch;
-        int utf8_len = get_utf8_len_from_first_byte(text[i]);
         for (int j = 1; j < utf8_len; j++)
         {
-            i++;
-            ch = text[i];
-            wch = (wch << 8) | ch;
+            wch = (wch << 8) | text[i + j];
         }
+
+        i += utf8_len;
+
         // 如果是换行符，换行
         if (wch == '\n')
         {
@@ -639,25 +628,31 @@ void LCD_Manager::Print_Text(int layer_index, Vector2 start_pos, string text, fl
 
 void LCD_Manager::Print_Text(int layer_index, Vector2 start_pos, Vector2 end_pos, string text, float scale, pixel color, Vector2 LC_adjust)
 {
+    if (layer_index < 0 || layer_index >= layers.size())
+    {
+        throw out_of_range("Layer index out of range");
+    }
+
     Vector2 word_size = {int(font.word_size.x * scale + LC_adjust.x), int(font.word_size.y * scale + LC_adjust.y)}; // 计算缩放后的字体大小，用以移动打印位置
     Vector2 write_pos = start_pos;
-    char ch;
-    wchar_t wch;
+    int text_length = text.length();
 
     // 遍历整个字符串
-    for (int i = 0; i < text.length(); i++)
+    for (int i = 0; i < text.length();)
     {
-        ch = text[i];
+        unsigned char ch = text[i];
+        wchar_t wch = 0;
+        int utf8_len = get_utf8_len_from_first_byte(text[i]);
 
         // 根据字符byte长度，额外读取字符组成宽字符wchar_t
         wch = ch;
-        int utf8_len = get_utf8_len_from_first_byte(text[i]);
         for (int j = 1; j < utf8_len; j++)
         {
-            i++;
-            ch = text[i];
-            wch = (wch << 8) | ch;
+            wch = (wch << 8) | text[i + j];
         }
+
+        i += utf8_len;
+
         // 如果是换行符，换行
         if (wch == '\n')
         {
@@ -676,22 +671,36 @@ void LCD_Manager::Print_Text(int layer_index, Vector2 start_pos, Vector2 end_pos
     }
 }
 
-void LCD_Manager::Print_Text(string layer_name, Vector2 start_pos, string text, float scale, pixel color, Vector2 LC_adjust)
+void LCD_Manager::Print_Text(const string &layer_name, Vector2 start_pos, const string &text, float scale, pixel color, Vector2 LC_adjust)
 {
-    int layer_index = layer_map[layer_name];
+    auto it = layer_map.find(layer_name);
+    if (it == layer_map.end())
+    {
+        throw invalid_argument("Layer with name '" + layer_name + "' does not exist.");
+    }
+    int layer_index = it->second;
     Print_Text(layer_index, start_pos, text, scale, color, LC_adjust);
 }
 
-void LCD_Manager::Print_Text(string layer_name, Vector2 start_pos, Vector2 end_pos, string text, float scale, pixel color, Vector2 LC_adjust)
+void LCD_Manager::Print_Text(const string &layer_name, Vector2 start_pos, Vector2 end_pos, const string &text, float scale, pixel color, Vector2 LC_adjust)
 {
-    int layer_index = layer_map[layer_name];
+    auto it = layer_map.find(layer_name);
+    if (it == layer_map.end())
+    {
+        throw invalid_argument("Layer with name '" + layer_name + "' does not exist.");
+    }
+    int layer_index = it->second;
     Print_Text(layer_index, start_pos, end_pos, text, scale, color, LC_adjust);
 }
 
 void LCD_Manager::draw_image(int layer_index, Vector2 loc, int image_index, Vector2_f pivot)
 {
-
     // 获取图层和图像
+    if (layer_index < 0 || layer_index >= layers.size() || image_index < 0 || image_index >= images.size())
+    {
+        throw out_of_range("Layer or image index out of range");
+    }
+
     Layer &layer = layers[layer_index];
     Image &image = images[image_index];
 
@@ -727,15 +736,20 @@ void LCD_Manager::draw_image(int layer_index, Vector2 loc, int image_index, Vect
     }
 }
 
-void LCD_Manager::draw_image(string layer_name, Vector2 loc, string image_name, Vector2_f pivot)
+void LCD_Manager::draw_image(const string &layer_name, Vector2 loc, const string &image_name, Vector2_f pivot)
 {
     int layer_index = layer_map[layer_name];
     int image_index = image_map[image_name];
     draw_image(layer_index, loc, image_index, pivot);
 }
 
-void LCD_Manager::draw_image(string layer_name, Vector2 loc, int image_index, Vector2_f pivot)
+void LCD_Manager::draw_image(const string &layer_name, Vector2 loc, int image_index, Vector2_f pivot)
 {
+    if(layer_map.find(layer_name) == layer_map.end())
+    {
+        cout << "Layer with name '" << layer_name << "' does not exist." << endl;
+        return;
+    }
     int layer_index = layer_map[layer_name];
     draw_image(layer_index, loc, image_index, pivot);
 }
