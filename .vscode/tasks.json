@@ -1,8 +1,9 @@
 {
     "tasks": [
-        {
+        // Study 项目专用任务
+        { // Windows 编译
             "type": "cppbuild",
-            "label": "[Study] MingW64-g++ 生成活动文件",
+            "label": "[Study] MingW64-g++ build",
             "command": "C:/Program Files/MingW64/bin/g++.exe",
             "args": [
                 "-fdiagnostics-color=always",
@@ -13,17 +14,157 @@
                 "-lws2_32",
                 "-lpthread"
             ],
-            "options": {
-                "cwd": "C:/Program Files/MingW64/bin"
-            },
             "problemMatcher": [
                 "$gcc"
             ],
-            "group": {
-                "kind": "build",
-                "isDefault": false
-            },
-            "detail": "[Study]项目专用的生成任务\n将/Study/src/内的所有.cpp文件编译为study.exe\n存放在/Study/build/"
+            "group": "build"
+        },
+        { // Linux_arm 编译
+            "type": "cppbuild",
+            "label": "[Study] arm-linux-g++ build",
+            "command": "/usr/local/arm/4.6.4/gcc-4.6.4/bin/arm-linux-g++",
+            "args": [
+                "${workspaceFolder}/Study/src/*.cpp",
+                "-I",
+                "/usr/local/jpeg/include",
+                "-L",
+                "/usr/local/jpeg/lib",
+                "-ljpeg",
+                "-o",
+                "${workspaceFolder}/Study/build/study_arm.o",
+                "-std=gnu++0x",
+                "-lpthread"
+            ],
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": "build",
+        },
+        { // Linux_x64 编译
+            "type": "cppbuild",
+            "label": "[Study] linux-x64-g++ build",
+            "command": "g++",
+            "args": [
+                "${workspaceFolder}/Study/src/*.cpp",
+                "-o",
+                "${workspaceFolder}/Study/build/study_x64.o",
+                "-std=gnu++0x",
+                "-lpthread"
+            ],
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": "build",
+        },
+        { // 删除共享文件夹中的旧文件
+            "type": "process",
+            "label": "[Study] remove old file",
+            "command": "rm",
+            "args": [
+                "-rf",
+                "${env:HOME}/Public/Study-build"
+            ],
+            "group": "build"
+        },
+        { // 编译 + 删除旧文件 + 移动
+            "type": "process",
+            "label": "[Study] build and update",
+            "command": "/usr/bin/cp",
+            "args": [
+                "-r",
+                "${workspaceFolder}/Study/build",
+                "${env:HOME}/Public/Study-build"
+            ],
+            "group": "build",
+            "dependsOn": [
+                "[Study] arm-linux-g++ build",
+                "[Study] remove old file"
+            ]
+        },
+        // Arm-linux-cpp-Main 项目专用任务
+        { // Linux_arm 编译
+            "type": "cppbuild",
+            "label": "[Arm-linux-cpp-Main] arm-linux-g++ build",
+            "command": "/usr/local/arm/4.6.4/gcc-4.6.4/bin/arm-linux-g++",
+            "args": [
+                "${workspaceFolder}/Arm-linux-cpp-Main/src/*.cpp",
+                "-I",
+                "/usr/local/jpeg/include",
+                "-L",
+                "/usr/local/jpeg/lib",
+                "-ljpeg",
+                "-o",
+                "${workspaceFolder}/Arm-linux-cpp-Main/build/main_arm.o",
+                "-std=gnu++0x",
+                "-lpthread"
+            ],
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": "build",
+        },
+        { // 删除旧文件
+            "type": "process",
+            "label": "[Arm-linux-cpp-Main] remove old file",
+            "command": "rm",
+            "args": [
+                "-rf",
+                "/home/ker0123/Public/Arm-linux-cpp-Main-build"
+            ],
+            "dependsOn": "[Arm-linux-cpp-Main] arm-linux-g++ build"
+        },
+        { // 编译 + 删除旧文件 + 移动
+            "type": "process",
+            "label": "[Arm-linux-cpp-Main] build and update",
+            "command": "/usr/bin/cp",
+            "args": [
+                "-r",
+                "${workspaceFolder}/Arm-linux-cpp-Main/build",
+                "${env:HOME}/Public/Arm-linux-cpp-Main-build"
+            ],
+            "group": "build",
+            "dependsOn": "[Arm-linux-cpp-Main] remove old file"
+        },
+        // Lcdprintf-C 项目专用任务
+        { // arm-linux-gcc 编译
+            "type": "cppbuild",
+            "label": "[Lcdprintf-C] arm-linux-gcc build",
+            "command": "/usr/local/arm/4.6.4/gcc-4.6.4/bin/arm-linux-gcc",
+            "args": [
+                "${workspaceFolder}/Lcdprintf-C/src/*.c",
+                "-o",
+                "${workspaceFolder}/Lcdprintf-C/build/lcdprintf_arm.o",
+                "-std=gnu99",
+                "-lpthread"
+            ],
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": "build",
+        },
+        { // 删除旧文件
+            "type": "process",
+            "label": "[Lcdprintf-C] remove old file",
+            "command": "rm",
+            "args": [
+                "-rf",
+                "${env:HOME}/Public/Lcdprintf-C-build"
+            ],
+        },
+        { //编译 + 删除旧文件 + 移动
+            "type": "process",
+            "label": "[Lcdprintf-C] build and update",
+            "command": "cp",
+            "args": [
+                "-rf",
+                "${workspaceFolder}/Lcdprintf-C/build",
+                "${env:HOME}/Public/Lcdprintf-C-build"
+            ],
+            "group": "build",
+            "dependsOn": [
+                "[Lcdprintf-C] arm-linux-gcc build",
+                "[Lcdprintf-C] remove old file"
+            ]
         }
     ],
     "version": "2.0.0"

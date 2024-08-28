@@ -115,39 +115,43 @@ void Load_font(const char *font_file, const char *index_file, Vector2 cut)
             }
         }
     }
-/*
-    data:  0x12 0x23 0x34 0x45 0x56 0x67
+    /*
+        data:  0x12 0x23 0x34 0x45 0x56 0x67
 
-    file:  0x45 0x34 0x23 0x12 0x00 0x00 0x67 0x56
+        file:  0x45 0x34 0x23 0x12 0x00 0x00 0x67 0x56
 
-    step1: 0x45 0x34 0x23 0x12
+        step1: 0x45 0x34 0x23 0x12
 
-    step2: 0x12 0x23 0x34 0x45
+        step2: 0x12 0x23 0x34 0x45
 
-    step3: 0x00 0x00 0x67 0x56
+        step3: 0x00 0x00 0x67 0x56
 
-    step4: 0x56 0x67 0x00 0x00
+        step4: 0x56 0x67 0x00 0x00
 
-    step6: 0x12 0x23 0x34 0x45 0x56 0x67 0x00 0x00
+        step6: 0x12 0x23 0x34 0x45 0x56 0x67 0x00 0x00
 
-    step7: 0x12 0x23 0x34 0x45 0x56 0x67 0x00 0x00
-*/
+        step7: 0x12 0x23 0x34 0x45 0x56 0x67 0x00 0x00
+    */
 
+    /*
+        <[3]> <[4]> <[6]> <[12]>
 
-/*
-    <[3]> <[4]> <[6]> <[12]>
+        img[0] = <[3]>
+        img[1] = <[4]>
+        img[2] = <[6]>
+        img[3] = <[12]>
 
-    img[0] = <[3]>
-    img[1] = <[4]>
-    img[2] = <[6]>
-    img[3] = <[12]>
-
-    find(num_img_6)
-*/
+        find(num_img_6)
+    */
 
     // 建立索引表
     printf("Building font index table...\n");
-    int index_fd = open("./res/font image/font image han index.txt", O_RDONLY);
+    int index_fd = open(index_file, O_RDONLY);
+    if (index_fd == -1)
+    {
+        printf("Error: cannot open index file: %s\n", index_file);
+        exit(1);
+    }
     int img_pos_x = 0;
     int img_pos_y = 0;
     wchar wch = '\0';
@@ -167,7 +171,7 @@ void Load_font(const char *font_file, const char *index_file, Vector2 cut)
 
         // 联系起来
         font_map[wch] = (Vector2){img_pos_x, img_pos_y};
-        // printf("Conecting %x to (%d,%d)\n", wch, img_pos_x, img_pos_y);
+        //printf("Conecting %x to (%d,%d)\n", wch, img_pos_x, img_pos_y);
 
         // 图片上虚拟指针右移一图片宽度，可能换行。
         img_pos_x = is_han(wch) ? img_pos_x + 2 * word_size_x : img_pos_x + word_size_x;
@@ -200,7 +204,7 @@ void LCD_print_char(Vector2 scr_pos, wchar c, float scale, pixel color)
     int font_width = font.word_size.x * (is_han(c) ? 2 : 1);
     int font_height = font.word_size.y;
 
-    if ((scale - 1.0)*(scale - 1.0) < 0.00001) // 不缩放
+    if ((scale - 1.0) * (scale - 1.0) < 0.00001) // 不缩放
     {
         for (int l = 0; l < font_height; l++)
         {
@@ -224,19 +228,19 @@ void LCD_print_char(Vector2 scr_pos, wchar c, float scale, pixel color)
         }
         return;
     }
-/*
-    lcd     |      img
+    /*
+        lcd     |      img
 
-        scale = 1
-    01      |       01
-    23      |       23
-        scale = 2
+            scale = 1
+        01      |       01
+        23      |       23
+            scale = 2
 
-    0011    |       01
-    0011    |       23
-    2233    |
-    2233    |
-*/
+        0011    |       01
+        0011    |       23
+        2233    |
+        2233    |
+    */
     // 遍历缩小后的屏幕区域，等比放大到正常大小，在图片上找对应像素
     Vector2 scr_size_new = (Vector2){font_width * scale, font_height * scale};
     Vector2 fit_to_img;
