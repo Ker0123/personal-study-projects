@@ -7,9 +7,10 @@
             "args": [
                 "-fdiagnostics-color=always",
                 "-g",
-                "${workspaceFolder}/Study/src/*.cpp",
+                "${workspaceFolder}/Study/src/${fileBasename}",
                 "-o",
-                "${workspaceFolder}/Study/build/study.exe",
+                "${workspaceFolder}/Study/build/${fileBasenameNoExtension}.exe",
+                "-lws2_32",
                 "-lpthread"
             ],
             "options": {
